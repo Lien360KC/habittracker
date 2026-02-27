@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Wins Tracker</title>
+    <!-- React & Babel for Browser Execution -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: black; color: white; margin: 0; overflow-x: hidden; }
+        .glass { backdrop-filter: blur(16px); background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); }
+        select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const [svg, setSvg] = useState("");
+            useEffect(() => {
+                if (window.lucide) {
+                    const icon = window.lucide.icons[name] || window.lucide.icons['Zap'];
+                    setSvg(icon.toSvg({ width: size, height: size, class: className }));
+                }
+            }, [name, size, className]);
+            return <span dangerouslySetInnerHTML={{ __html: svg }} />;
+        };
+
+        const HABIT_ICONS = {
+            gym: 'Dumbbell',
+            read: 'Book',
+            school: 'Target',
+            coffee: 'Coffee',
+            meditate: 'Brain',
+            default: 'Zap'
+        };
+
+        const DAYS_OF_WEEK = [
+            { label: 'M', value: 1 }, { label: 'T', value: 2 }, { label: 'W', value: 3 },
+            { label: 'T', value: 4 }, { label: 'F', value: 5 }, { label: 'S', value: 6 }, { label: 'S', value: 0 },
+        ];
+
+        const App = () => {
+            const [habits, setHabits] = useState(() => {
+                const saved = localStorage.getItem('daily_wins_v8');
+                if (saved) return JSON.parse(saved);
+                return [
+                    { id: '1', name: 'Hydrate & Sunlight', groupId: 'morning', icon: 'coffee', schedule: [0, 1, 2, 3, 4, 5, 6], completedDays: {} },
+                    { id: '2', name: 'Review Notes', groupId: 'study', icon: 'school', schedule: [1, 2, 3, 4, 5], completedDays: {} },
+                ];
+            });
+
+            const [groups, setGroups] = useState(() => {
+                const saved = localStorage.getItem('daily_wins_groups_v8');
+                if (saved) return JSON.parse(saved);
+                return [
+                    { id: 'morning', name: 'Morning routines', color: 'border-blue-500' },
+                    { id: 'study', name: 'Study/School', color: 'border-indigo-500' },
+                ];
+            });
+
+            const [isHabitModalOpen, setIsHabitModalOpen] = useState(false);
+            const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
+            const [newHabit, setNewHabit] = useState({ name: '', groupId: 'morning', icon: 'default', schedule: [0, 1, 2, 3, 4, 5, 6] });
+            const [newGroupName, setNewGroupName] = useState('');
+
+            const todayKey = new Date().toISOString().split('T')[0];
+            const todayDayIndex = new Date().getDay();
+
+            useEffect(() => {
+                localStorage.setItem('daily_wins_v8', JSON.stringify(habits));
+                localStorage.setItem('daily_wins_groups_v8', JSON.stringify(groups));
+            }, [habits, groups]);
+
+            const habitsDueToday = useMemo(() => habits.filter(h => h.schedule?.includes(todayDayIndex)), [habits, todayDayIndex]);
+            const dailyProgress = useMemo(() => {
+                if (habitsDueToday.length === 0) return 0;
+                const completedToday = habitsDueToday.filter(h => h.completedDays?.[todayKey]).length;
+                return Math.round((completedToday / habitsDueToday.length) * 100);
+            }, [habitsDueToday, todayKey]);
+
+            useEffect(() => {
+                if (dailyProgress === 100 && habitsDueToday.length > 0) {
+                    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+                }
+            }, [dailyProgress]);
+
+            const toggleHabit = (id) => {
+                setHabits(prev => prev.map(h => {
+                    if (h.id === id) {
+                        const completedDays = { ...(h.completedDays || {}) };
+                        if (completedDays[todayKey]) delete completedDays[todayKey];
+                        else completedDays[todayKey] = true;
+                        return { ...h, completedDays };
+                    }
+                    return h;
+                }));
+            };
+
+            const addHabit = (e) => {
+                e.preventDefault();
+                if (!newHabit.name.trim()) return;
+                setHabits([...habits, { ...newHabit, id: Date.now().toString(), completedDays: {} }]);
+                setIsHabitModalOpen(false);
+                setNewHabit({ name: '', groupId: groups[0]?.id || 'morning', icon: 'default', schedule: [0, 1, 2, 3, 4, 5, 6] });
+            };
+
+            const addGroup = (e) => {
+                e.preventDefault();
+                if (!newGroupName.trim()) return;
+                setGroups([...groups, { id: Date.now().toString(), name: newGroupName, color: 'border-blue-500' }]);
+                setNewGroupName('');
+                setIsGroupModalOpen(false);
+            };
+
+            return (
+                <div className="min-h-screen relative pb-32">
+                    <div className="fixed inset-0 z-0 bg-cover bg-center opacity-40 blur-xl scale-110" 
+                         style={{ backgroundImage: "url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564')" }}></div>
+
+                    <div className="relative z-10 max-w-xl mx-auto px-5 py-10">
+                        <header className="flex flex-col items-center mb-10 text-center">
+                            <div className="glass px-4 py-2 rounded-full mb-6 flex items-center gap-2">
+                                <Icon name="Zap" size={20} className="text-blue-400" />
+                                <h1 className="text-lg font-black uppercase italic tracking-tighter">Daily Wins</h1>
+                            </div>
+                            <div className="relative w-40 h-40">
+                                <svg className="w-full h-full -rotate-90">
+                                    <circle cx="80" cy="80" r="70" fill="transparent" stroke="rgba(255,255,255,0.1)" strokeWidth="10" />
+                                    <circle cx="80" cy="80" r="70" fill="transparent" stroke="#3b82f6" strokeWidth="10" 
+                                            strokeDasharray="440" strokeDashoffset={440 - (440 * dailyProgress) / 100} strokeLinecap="round" />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-4xl font-black">{dailyProgress}%</span>
+                                </div>
+                            </div>
+                        </header>
+
+                        <div className="space-y-12">
+                            {groups.map(group => (
+                                <section key={group.id} className="space-y-4">
+                                    <h2 className="text-xs font-black uppercase tracking-widest text-white/50 flex items-center gap-2">
+                                        <span className={`w-2 h-2 rounded-full bg-blue-500`}></span>
+                                        {group.name}
+                                    </h2>
+                                    <div className="grid gap-3">
+                                        {habits.filter(h => h.groupId === group.id).map(habit => (
+                                            <div key={habit.id} onClick={() => toggleHabit(habit.id)} 
+                                                 className={`glass p-5 rounded-[2rem] flex items-center justify-between cursor-pointer transition-all ${habit.completedDays?.[todayKey] ? 'opacity-50' : ''}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <Icon name={habit.completedDays?.[todayKey] ? 'CheckCircle2' : 'Circle'} 
+                                                          className={habit.completedDays?.[todayKey] ? 'text-blue-500' : 'text-white/20'} size={28} />
+                                                    <div>
+                                                        <p className={`font-bold ${habit.completedDays?.[todayKey] ? 'line-through' : ''}`}>{habit.name}</p>
+                                                        <div className="flex gap-1 mt-1">
+                                                            {DAYS_OF_WEEK.map(d => (
+                                                                <span key={d.label} className={`text-[8px] font-black ${habit.schedule?.includes(d.value) ? 'text-blue-400' : 'text-white/5'}`}>{d.label}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <button onClick={(e) => { e.stopPropagation(); setHabits(habits.filter(h => h.id !== habit.id)); }} className="text-white/10 hover:text-red-500"><Icon name="Trash2" size={16} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-4 glass p-2 rounded-3xl z-[90]">
+                        <button onClick={() => setIsGroupModalOpen(true)} className="p-4 text-white/40"><Icon name="FolderPlus" /></button>
+                        <button onClick={() => setIsHabitModalOpen(true)} className="bg-blue-600 px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl shadow-blue-900/40">New Win</button>
+                    </div>
+
+                    {isGroupModalOpen && (
+                        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+                            <div className="bg-slate-900 w-full max-w-sm rounded-[2.5rem] p-8 border border-white/10">
+                                <h3 className="text-xl font-black mb-6 uppercase tracking-tighter italic">New Group</h3>
+                                <input className="w-full bg-black border border-white/10 rounded-2xl p-4 mb-6" placeholder="Group name..." 
+                                       value={newGroupName} onChange={e => setNewGroupName(e.target.value)} />
+                                <div className="flex gap-4">
+                                    <button onClick={() => setIsGroupModalOpen(false)} className="flex-1 py-4 font-bold text-white/40">Cancel</button>
+                                    <button onClick={addGroup} className="flex-1 py-4 bg-blue-600 rounded-2xl font-black">Create</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isHabitModalOpen && (
+                        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6">
+                            <div className="bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 border border-white/10">
+                                <h3 className="text-xl font-black mb-6 uppercase tracking-tighter italic">New Objective</h3>
+                                <input className="w-full bg-black border border-white/10 rounded-2xl p-4 mb-6" placeholder="What's the goal?" 
+                                       onChange={e => setNewHabit({...newHabit, name: e.target.value})} />
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsHabitModalOpen(false)} className="flex-1 py-4 font-bold text-white/40">Cancel</button>
+                                    <button onClick={addHabit} className="flex-1 py-4 bg-blue-600 rounded-2xl font-black">Activate</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
